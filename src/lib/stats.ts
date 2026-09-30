@@ -51,8 +51,9 @@ export async function getAdminStats() {
 export async function getUsersWithCounts() {
   const [users, grouped] = await Promise.all([
     prisma.user.findMany({
-      orderBy: [{ role: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
+      // Pending sign-ups first so they're hard to miss.
+      orderBy: [{ approved: "asc" }, { role: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true, email: true, role: true, active: true, approved: true, createdAt: true },
     }),
     prisma.post.groupBy({ by: ["authorId", "status"], _count: { _all: true }, _sum: { views: true } }),
   ]);

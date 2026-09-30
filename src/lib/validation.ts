@@ -28,6 +28,7 @@ export const updateUserSchema = z
     name: name.optional(),
     role: z.enum(["ADMIN", "EMPLOYEE"]).optional(),
     active: z.boolean().optional(),
+    approved: z.boolean().optional(),
     password: password.optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "Nothing to update");

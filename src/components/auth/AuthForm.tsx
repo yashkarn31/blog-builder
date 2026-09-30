@@ -26,6 +26,7 @@ export function AuthForm({ mode, showDemo }: { mode: Mode; showDemo: boolean }) 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [pending, setPending] = useState(false);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -36,7 +37,13 @@ export function AuthForm({ mode, showDemo }: { mode: Mode; showDemo: boolean }) 
     setError("");
     try {
       const body = mode === "login" ? { email: form.email, password: form.password } : form;
-      const { user } = await api<{ user: { role: string } }>(`/api/auth/${mode}`, { method: "POST", json: body });
+      const res = await api<{ user?: { role: string }; pending?: boolean }>(`/api/auth/${mode}`, { method: "POST", json: body });
+      if (res.pending || !res.user) {
+        setPending(true);
+        setLoading(false);
+        return;
+      }
+      const { user } = res;
       const fallback = user.role === "ADMIN" ? "/admin" : "/dashboard";
       router.replace(safeNext(params.get("next")) ?? fallback);
       router.refresh();
@@ -44,6 +51,20 @@ export function AuthForm({ mode, showDemo }: { mode: Mode; showDemo: boolean }) 
       setError((err as Error).message);
       setLoading(false);
     }
+  }
+
+  if (pending) {
+    return (
+      <div role="status" className="rounded-2xl bg-success-soft p-5 text-sm leading-relaxed text-success">
+        <p className="font-semibold">Thanks, your account has been created.</p>
+        <p className="mt-1">
+          An admin needs to approve it before you can log in. Once they have, log in with {form.email}.
+        </p>
+        <Link href="/login" className="mt-3 inline-block font-medium underline underline-offset-2">
+          Go to log in
+        </Link>
+      </div>
+    );
   }
 
   return (

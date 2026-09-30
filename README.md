@@ -67,7 +67,7 @@ Production build: `npm run build && npm start`.
 | --------------------- | -------- | ------------------------------------------------------------------ |
 | `DATABASE_URL`        | ✅       | PostgreSQL connection string                                       |
 | `JWT_SECRET`          | ✅       | ≥ 32 characters, used to sign session tokens                       |
-| `ALLOW_SIGNUP`        |          | `false` turns off public sign-up (admins can still add people)     |
+| `SIGNUP_MODE`         |          | `approval` (default): new sign-ups wait for an admin. `open`: active at once. `closed`: admins create all accounts. `ALLOW_SIGNUP=false` still means `closed`. |
 | `SHOW_DEMO_ACCOUNTS`  |          | `false` hides the one-click demo-account buttons on the login page |
 | `SEED_ADMIN_EMAIL`    |          | Admin email for the seed script                                    |
 | `SEED_ADMIN_PASSWORD` |          | Admin password for the seed script                                 |
@@ -99,6 +99,7 @@ Production build: `npm run build && npm start`.
 - Sign up and log in with email and password. Passwords are hashed with bcrypt (cost 12).
 - JWT session in an `httpOnly`, `SameSite=Lax` cookie (`Secure` in production). Tokens last 7 days.
 - Two roles, **Admin** and **Employee**. Public sign-up always creates an Employee. Admins come from the seed script or are promoted by another admin.
+- **Sign-up needs admin approval by default** (`SIGNUP_MODE=approval`). A new account can't log in until an admin approves it from **Admin → Employees**, where it shows as *Pending approval* with Approve and Reject buttons. Accounts created by an admin are approved immediately.
 - `src/proxy.ts` redirects signed-out users away from `/dashboard` and `/admin`, and non-admins away from `/admin`.
 - Every page and API handler then re-checks the user against the database. Deactivating, deleting or demoting someone takes effect on their next request, even if their JWT hasn't expired.
 

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { KeyRound, Loader2, MoreHorizontal, Power, Shield, Trash2, UserPlus, X } from "lucide-react";
+import { Check, KeyRound, Loader2, MoreHorizontal, Power, Shield, Trash2, UserPlus, X } from "lucide-react";
 import { api } from "@/lib/client-api";
 import { formatDate } from "@/lib/format";
 import { Avatar } from "@/components/ui/Avatar";
@@ -14,6 +14,7 @@ export type UserRow = {
   email: string;
   role: "ADMIN" | "EMPLOYEE";
   active: boolean;
+  approved: boolean;
   createdAt: string;
   published: number;
   drafts: number;
@@ -47,6 +48,14 @@ export function EmployeesManager({ users, currentUserId }: { users: UserRow[]; c
     if (password) patch(u, { password });
   };
 
+  const reject = (u: UserRow) => {
+    if (confirm(`Reject ${u.name}'s sign-up? Their pending account will be deleted.`)) {
+      run(u.id, () => api(`/api/admin/users/${u.id}`, { method: "DELETE" }));
+    }
+  };
+
+  const pending = users.filter((u) => !u.approved).length;
+
   const remove = (u: UserRow) => {
     const posts = u.published + u.drafts;
     const msg = `Permanently delete ${u.name}?${posts ? ` Their ${posts} post(s), likes and comments will be deleted too.` : ""}\n\nTip: deactivating keeps their posts but blocks login.`;
@@ -58,7 +67,10 @@ export function EmployeesManager({ users, currentUserId }: { users: UserRow[]; c
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-fg-muted">{users.length} accounts</p>
+        <p className="text-sm text-fg-muted">
+          {users.length} accounts
+          {pending > 0 && <span className="ml-2 font-medium text-warning">· {pending} awaiting approval</span>}
+        </p>
         <button type="button" onClick={() => setShowForm((s) => !s)} className={button(showForm ? "secondary" : "primary", "md")}>
           {showForm ? <X className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />} {showForm ? "Cancel" : "Add employee"}
         </button>
@@ -108,7 +120,13 @@ export function EmployeesManager({ users, currentUserId }: { users: UserRow[]; c
                 </td>
                 <td className="px-3">
                   <span className={`text-xs font-medium ${u.active ? "text-success" : "text-fg-subtle"}`}>
-                    {u.active ? "● Active" : "○ Deactivated"}
+                    {!u.approved ? (
+                      <span className="text-warning">◐ Pending approval</span>
+                    ) : u.active ? (
+                      "● Active"
+                    ) : (
+                      "○ Deactivated"
+                    )}
                   </span>
                 </td>
                 <td className="px-3 text-right tabular-nums">{u.published}</td>
@@ -116,7 +134,16 @@ export function EmployeesManager({ users, currentUserId }: { users: UserRow[]; c
                 <td className="px-3 text-right tabular-nums text-fg-muted">{u.views}</td>
                 <td className="px-3 text-fg-muted">{formatDate(u.createdAt)}</td>
                 <td className="relative px-3 text-right">
-                  {u.id !== currentUserId && (
+                  {!u.approved ? (
+                    <div className="flex justify-end gap-1.5">
+                      <button type="button" onClick={() => patch(u, { approved: true })} disabled={busy === u.id} className={button("primary", "sm")}>
+                        {busy === u.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Approve
+                      </button>
+                      <button type="button" onClick={() => reject(u)} disabled={busy === u.id} className={button("secondary", "sm")}>
+                        Reject
+                      </button>
+                    </div>
+                  ) : u.id !== currentUserId && (
                     <>
                       <button
                         type="button"

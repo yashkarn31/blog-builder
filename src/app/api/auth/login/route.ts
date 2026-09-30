@@ -19,6 +19,7 @@ export const POST = route(async (req) => {
   const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !ok) throw new ApiError(401, "Invalid email or password.");
   if (!user.active) throw new ApiError(403, "This account has been deactivated. Contact an admin.");
+  if (!user.approved) throw new ApiError(403, "Your account is waiting for an admin to approve it.");
 
   await createSession(user);
   return NextResponse.json({ user: { id: user.id, name: user.name, role: user.role } });

@@ -28,9 +28,10 @@ export const PATCH = route<Ctx>(async (req, { params }) => {
       name: input.name,
       role: input.role,
       active: input.active,
+      approved: input.approved,
       passwordHash: input.password ? await hashPassword(input.password) : undefined,
     },
-    select: { id: true, name: true, email: true, role: true, active: true },
+    select: { id: true, name: true, email: true, role: true, active: true, approved: true },
   });
   return NextResponse.json({ user });
 });
