@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -71,7 +72,7 @@ export function PostEditor({ initial, categories, tagSuggestions, editingAsAdmin
 
   const idRef = useRef(initial.id);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const insertImageRef = useRef<(file: File) => void>(() => {});
+  const insertImageRef = useRef<(file: File, at?: number) => void>(() => {});
   const titleRef = useRef<HTMLTextAreaElement>(null);
 
   const editor = useEditor({
@@ -89,11 +90,13 @@ export function PostEditor({ initial, categories, tagSuggestions, editingAsAdmin
     content: initial.content,
     editorProps: {
       attributes: { class: "article prose prose-lg max-w-none dark:prose-invert focus:outline-none" },
-      handleDrop: (_view, event, _slice, moved) => {
+      handleDrop: (view, event, _slice, moved) => {
         const file = event.dataTransfer?.files?.[0];
         if (moved || !file?.type.startsWith("image/")) return false;
         event.preventDefault();
-        insertImageRef.current(file);
+        // Insert where the file was dropped, not at the current selection.
+        const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+        insertImageRef.current(file, at);
         return true;
       },
       handlePaste: (_view, event) => {
@@ -111,15 +114,24 @@ export function PostEditor({ initial, categories, tagSuggestions, editingAsAdmin
   });
 
   useEffect(() => {
-    insertImageRef.current = async (file: File) => {
+    insertImageRef.current = async (file: File, at?: number) => {
       if (!editor) return;
+      // Default to just after the selection so a selected image or text is
+      // never replaced. Keep the position valid while the upload runs.
+      let pos = at ?? editor.state.selection.to;
+      const track = ({ transaction }: { transaction: Transaction }) => {
+        pos = transaction.mapping.map(pos);
+      };
+      editor.on("transaction", track);
       setUploadingInline(true);
       try {
         const { url } = await uploadImage(file);
-        editor.chain().focus().setImage({ src: url, alt: file.name.replace(/\.[^.]+$/, "") }).run();
+        editor.off("transaction", track);
+        insertImageAt(editor, pos, { src: url, alt: file.name.replace(/\.[^.]+$/, "") });
       } catch (err) {
         alert((err as Error).message);
       } finally {
+        editor.off("transaction", track);
         setUploadingInline(false);
       }
     };
@@ -378,6 +390,36 @@ export function PostEditor({ initial, categories, tagSuggestions, editingAsAdmin
       </div>
     </div>
   );
+}
+
+/**
+ * Inserts an image block at `pos` (splitting a paragraph if needed) and puts a
+ * text cursor right after it, so the next insert or keystroke doesn't replace it.
+ */
+function insertImageAt(editor: Editor, pos: number, attrs: { src: string; alt: string }) {
+  editor
+    .chain()
+    .focus()
+    .command(({ tr, state }) => {
+      const image = state.schema.nodes.image.create(attrs);
+      const at = Math.max(0, Math.min(pos, tr.doc.content.size));
+      tr.replaceRangeWith(at, at, image);
+
+      let after = -1;
+      tr.doc.descendants((node, nodePos) => {
+        if (after >= 0) return false;
+        if (node === image) after = nodePos + node.nodeSize;
+      });
+      if (after < 0) return true;
+
+      if (!tr.doc.resolve(after).nodeAfter?.isTextblock) {
+        tr.insert(after, state.schema.nodes.paragraph.create());
+      }
+      tr.setSelection(TextSelection.create(tr.doc, after + 1));
+      tr.scrollIntoView();
+      return true;
+    })
+    .run();
 }
 
 function countWords(text: string) {
