@@ -68,6 +68,7 @@ Production build: `npm run build && npm start`.
 | `DATABASE_URL`        | ✅       | PostgreSQL connection string                                       |
 | `JWT_SECRET`          | ✅       | ≥ 32 characters, used to sign session tokens                       |
 | `SIGNUP_MODE`         |          | `approval` (default): new sign-ups wait for an admin. `open`: active at once. `closed`: admins create all accounts. `ALLOW_SIGNUP=false` still means `closed`. |
+| `TRUSTED_PROXY_HOPS`  |          | Reverse proxies in front of the app that append to `X-Forwarded-For` (e.g. `1` for nginx or Vercel). Default `0`. |
 | `SHOW_DEMO_ACCOUNTS`  |          | `false` hides the one-click demo-account buttons on the login page |
 | `SEED_ADMIN_EMAIL`    |          | Admin email for the seed script                                    |
 | `SEED_ADMIN_PASSWORD` |          | Admin password for the seed script                                 |
@@ -169,7 +170,11 @@ Production build: `npm run build && npm start`.
   - Images must be `https://` or our own `/uploads/`.
 - **CSRF:** `SameSite=Lax` cookies, plus an `Origin` check on all state-changing API requests.
 - Zod validation on every input, with length limits everywhere.
-- In-memory rate limiting on login, sign-up, comments and uploads.
+- **Rate limiting** (in memory):
+  - Login is limited per IP and **per account**: 10 failed attempts in 15 minutes pause that account's logins. The account limit is keyed on the email, so faking `X-Forwarded-For` doesn't get around it.
+  - Sign-up is limited per IP and by a global ceiling of 30 new accounts an hour. Invalid or duplicate requests don't count towards the ceiling.
+  - Comments and uploads are limited per user.
+  - Behind a proxy, set `TRUSTED_PROXY_HOPS` so the client IP comes from the `X-Forwarded-For` entry your proxy added, which the client can't fake. Without it, per-IP limits are best-effort (see Known limitations). The limiter's memory is capped.
 - **Uploads:**
   - Limited to 8 MB and re-encoded.
   - Stored under random names outside `public/`.
@@ -244,6 +249,7 @@ src/
   - On Vercel or other serverless hosts, files vanish between invocations. Swap `saveImage()` for an S3 or Cloudinary upload there.
   - Deleting a post or cover image doesn't delete the file yet, so orphans can build up.
 - **Rate limiting is in memory,** so it's per process and resets on restart. A multi-instance deployment should use Redis or similar.
+- **Per-IP limits are best-effort when the app is exposed directly.** `next start` keeps a client-supplied `X-Forwarded-For`, so without a trusted proxy (`TRUSTED_PROXY_HOPS=0`) the IP can be faked. The per-account login limit and the global sign-up ceiling still hold. The per-account limit also means someone who knows an email can pause that account's logins for 15 minutes.
 - **Search** uses `ILIKE` across columns. That's plenty for hundreds of posts. At scale I'd switch to Postgres full-text search (`tsvector` + GIN index) and add ranking.
 - **Sessions can't be revoked individually** without a session table. Deactivating or deleting a user does lock them out immediately, because every request re-reads the user.
 - The **view counter** is a simple per-browser count, not unique-visitor analytics.
