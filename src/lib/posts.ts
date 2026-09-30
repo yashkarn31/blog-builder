@@ -156,7 +156,7 @@ export function publishedWhere({ q, category, tag }: Omit<PostFilters, "page">):
 
 export async function listPublishedPosts(filters: PostFilters) {
   const where = publishedWhere(filters);
-  const [posts, total] = await prisma.$transaction([
+  const [posts, total] = await Promise.all([
     prisma.post.findMany({
       where,
       select: postCardSelect,
